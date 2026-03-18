@@ -4,6 +4,10 @@
 
 這是一個基於 **Flask** 和 **Web UI** 的強化學習環境實現，用於解決經典的網格世界（Grid World）問題。本專案通過值迭代算法（Value Iteration）和策略評估（Policy Evaluation）來找出最優路徑。
 
+## Demo網址
+
+https://deeprl-gridworld.onrender.com
+**因為使用免費伺服器託管，初次開啟網頁可能需要約 1 分鐘的喚醒時間，請耐心等候，重新整理後即可正常運作。**
 ## 功能說明
 
 ### 核心算法
