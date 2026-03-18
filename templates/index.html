@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>RL Grid World - 強化學習作業</title>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --text-color: #00ffcc;
+            --border-color: #1f3a5f;
+            --panel-bg: rgba(15, 25, 40, 0.8);
+            --start-color: #39ff14; 
+            --goal-color: #ff007f;  
+            --obs-color: #222;
+            --path-color: #ffd700;  
+        }
+
+        body { 
+            font-family: 'Courier New', Courier, monospace; 
+            background-color: var(--bg-color); 
+            color: var(--text-color); 
+            text-align: center; 
+            margin: 0; padding: 20px;
+        }
+
+        h2, h3 { text-shadow: 0 0 10px var(--text-color); margin-top: 0; }
+
+        .header-panel {
+            background: var(--panel-bg); border: 1px solid var(--border-color);
+            padding: 20px; margin-bottom: 20px; border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.2);
+        }
+
+        input[type="number"] {
+            background: #000; border: 1px solid var(--text-color); color: var(--text-color);
+            padding: 5px; width: 50px; text-align: center; font-family: inherit;
+        }
+        button { 
+            background: transparent; color: var(--text-color); 
+            border: 1px solid var(--text-color); padding: 8px 15px; margin: 0 5px; 
+            cursor: pointer; font-family: inherit; font-weight: bold; transition: 0.3s;
+        }
+        button:hover { background: var(--text-color); color: #000; box-shadow: 0 0 10px var(--text-color); }
+        button:disabled { border-color: #555; color: #555; cursor: not-allowed; box-shadow: none; }
+
+        .grid-container { display: grid; gap: 2px; justify-content: center; margin-top: 10px; }
+        .cell { 
+            width: 70px; height: 70px; border: 1px solid var(--border-color); 
+            background-color: rgba(0, 255, 204, 0.05);
+            display: flex; flex-direction: column; justify-content: center; align-items: center; 
+            position: relative; transition: 0.2s;
+        }
+        .setup-cell { cursor: pointer; }
+        .setup-cell:hover { border-color: var(--text-color); background-color: rgba(0, 255, 204, 0.1); }
+        
+        .cell-num { position: absolute; top: 2px; left: 4px; font-size: 10px; color: #666; }
+        
+        .start { background-color: rgba(57, 255, 20, 0.2) !important; border-color: var(--start-color); box-shadow: inset 0 0 10px var(--start-color); }
+        .goal { background-color: rgba(255, 0, 127, 0.2) !important; border-color: var(--goal-color); box-shadow: inset 0 0 10px var(--goal-color); color: var(--goal-color); font-weight: bold; font-size: 20px;}
+        .obstacle { background-color: var(--obs-color) !important; border-color: #000; }
+        .path-highlight { border-color: var(--path-color); box-shadow: inset 0 0 15px var(--path-color); background-color: rgba(255, 215, 0, 0.1) !important; transition: all 0.3s ease-in-out; }
+        
+        .value { font-size: 14px; color: #fff; text-shadow: 0 0 2px #000; }
+        .arrow { font-size: 24px; font-weight: bold; color: var(--text-color); }
+
+        #setup-area { margin-bottom: 30px; }
+        #status-text { font-size: 16px; font-weight: bold; color: var(--start-color); }
+        
+        .results-area { display: none; justify-content: center; gap: 50px; margin-top: 20px; }
+        .matrix-section { background: var(--panel-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--border-color); }
+
+    </style>
+</head>
+<body>
+
+    <div class="header-panel">
+        <h2>Grid World Environment</h2>
+        
+        <div class="controls">
+            <label>Map Size (n): </label>
+            <input type="number" id="gridSize" min="5" max="9" value="5">
+            <button onclick="initSetup()">1. Initialize Grid</button>
+            <button id="btn-hw1-2" onclick="runRL('/hw1_2', 'hw1-2')" disabled>2. Run Policy Eval</button>
+            <button id="btn-hw1-3" onclick="runRL('/hw1_3', 'hw1-3')" disabled>3. Run Value Iter</button>
+        </div>
+    </div>
+    
+    <div id="setup-area">
+        <h3 id="status-text">請點擊下方網格：設定 1 個起點 (Green)</h3>
+        <div id="setup-grid" class="grid-container"></div>
+    </div>
+
+    <div id="results-area" class="results-area">
+        <div class="matrix-section">
+            <h3>Policy Matrix</h3>
+            <div id="policy-grid" class="grid-container"></div>
+        </div>
+        <div class="matrix-section">
+            <h3>Value Matrix</h3>
+            <div id="value-grid" class="grid-container"></div>
+        </div>
+    </div>
+
+    <script>
+        let n = 5;
+        let start = null;
+        let goal = null;
+        let obstacles = [];
+        let clicks = 0;
+
+        function initSetup() {
+            n = parseInt(document.getElementById('gridSize').value);
+            if(n < 5 || n > 9) return alert("請輸入 5 到 9！");
+            
+            start = null; goal = null; obstacles = []; clicks = 0;
+            
+            document.getElementById('status-text').innerText = "請點擊下方網格：設定 1 個起點 (Green)";
+            document.getElementById('status-text').style.color = "var(--start-color)";
+            document.getElementById('results-area').style.display = "none";
+            document.getElementById('btn-hw1-2').disabled = true;
+            document.getElementById('btn-hw1-3').disabled = true;
+
+            const grid = document.getElementById('setup-grid');
+            grid.style.gridTemplateColumns = `repeat(${n}, 70px)`;
+            grid.innerHTML = '';
+
+            for (let r = 0; r < n; r++) {
+                for (let c = 0; c < n; c++) {
+                    let cell = document.createElement('div');
+                    cell.className = 'cell setup-cell';
+                    cell.id = `setup-${r}-${c}`;
+                    cell.innerHTML = `<span class="cell-num">${r * n + c + 1}</span>`;
+                    cell.onclick = () => handleSetupClick(r, c, cell);
+                    grid.appendChild(cell);
+                }
+            }
+        }
+
+        function handleSetupClick(r, c, cell) {
+            if (cell.classList.contains('start') || cell.classList.contains('goal') || cell.classList.contains('obstacle')) return;
+
+            if (clicks === 0) {
+                start = [r, c];
+                cell.classList.add('start');
+                document.getElementById('status-text').innerText = "請點擊下方網格：設定 1 個終點 (Pink)";
+                document.getElementById('status-text').style.color = "var(--goal-color)";
+                clicks++;
+            } else if (clicks === 1) {
+                goal = [r, c];
+                cell.classList.add('goal');
+                cell.innerHTML += `<div class="value">G</div>`;
+                document.getElementById('status-text').innerText = `請點擊網格：設定 ${n - 2} 個障礙物 (Dark)`;
+                document.getElementById('status-text').style.color = "#ccc";
+                clicks++;
+            } else if (clicks > 1 && clicks <= n - 1) {
+                obstacles.push([r, c]);
+                cell.classList.add('obstacle');
+                if (clicks === n - 1) {
+                    document.getElementById('status-text').innerText = "設定完成！請點擊上方按鈕執行演算法。";
+                    document.getElementById('status-text').style.color = "var(--text-color)";
+                    document.getElementById('btn-hw1-2').disabled = false;
+                    document.getElementById('btn-hw1-3').disabled = false;
+                } else {
+                    document.getElementById('status-text').innerText = `請點擊網格：設定剩餘 ${n - 1 - clicks} 個障礙物`;
+                }
+                clicks++;
+            }
+        }
+
+        async function runRL(endpoint, mode) {
+            const payload = { n: n, start: start, goal: goal, obstacles: obstacles };
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+            
+            renderResultGrids(data.V, data.policy, data.path, mode);
+        }
+
+        function renderResultGrids(V, policy, path, mode) {
+            document.getElementById('results-area').style.display = "flex";
+            const pGrid = document.getElementById('policy-grid');
+            const vGrid = document.getElementById('value-grid');
+            
+            pGrid.style.gridTemplateColumns = `repeat(${n}, 70px)`;
+            vGrid.style.gridTemplateColumns = `repeat(${n}, 70px)`;
+            pGrid.innerHTML = ''; vGrid.innerHTML = '';
+
+            for (let r = 0; r < n; r++) {
+                for (let c = 0; c < n; c++) {
+                    let cellNum = r * n + c + 1;
+                    
+                    let pc = document.createElement('div');
+                    pc.className = 'cell'; pc.id = `pol-${r}-${c}`;
+                    pc.innerHTML = `<span class="cell-num">${cellNum}</span>`;
+                    
+                    let vc = document.createElement('div');
+                    vc.className = 'cell'; vc.id = `val-${r}-${c}`;
+                    vc.innerHTML = `<span class="cell-num">${cellNum}</span>`;
+
+                    if (start[0] === r && start[1] === c) {
+                        pc.classList.add('start'); vc.classList.add('start');
+                    }
+                    if (goal[0] === r && goal[1] === c) {
+                        pc.classList.add('goal'); vc.classList.add('goal');
+                        pc.innerHTML += `<div class="value">G</div>`;
+                        vc.innerHTML += `<div class="value">G</div>`;
+                    } else if (obstacles.some(obs => obs[0] === r && obs[1] === c)) {
+                        pc.classList.add('obstacle'); vc.classList.add('obstacle');
+                    } else {
+                        pc.innerHTML += `<div class="arrow">${policy[r][c]}</div>`;
+                        vc.innerHTML += `<div class="value">${V[r][c]}</div>`;
+                    }
+
+                    pGrid.appendChild(pc);
+                    vGrid.appendChild(vc);
+                }
+            }
+
+            // HW1-3 的動態路徑動畫效果
+            if (mode === 'hw1-3' && path && path.length > 0) {
+                let delay = 0;
+                path.forEach(pos => {
+                    setTimeout(() => {
+                        let r = pos[0], c = pos[1];
+                        let pCell = document.getElementById(`pol-${r}-${c}`);
+                        let vCell = document.getElementById(`val-${r}-${c}`);
+                        if (pCell) pCell.classList.add('path-highlight');
+                        if (vCell) vCell.classList.add('path-highlight');
+                    }, delay);
+                    delay += 150; 
+                });
+            }
+        }
+
+        initSetup();
+    </script>
+</body>
+</html>
